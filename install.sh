@@ -67,7 +67,9 @@ preflight() {
   [ -n "$PY" ] || die "no usable python3 found"
   ok "ffmpeg $(ffmpeg -version 2>/dev/null | head -1 | cut -d' ' -f3)"
   ok "python $($PY --version 2>&1 | awk '{print $2}')"
-  [ "$OS" = "Linux" ] && ok "node $(node --version)"
+  # An `if`, not `[ … ] && …`: as the last command, a false test would make the
+  # function return 1 and `set -e` would abort the installer on macOS.
+  if [ "$OS" = "Linux" ]; then ok "node $(node --version)"; fi
 }
 
 # -----------------------------------------------------------------------------
@@ -147,7 +149,9 @@ install_hyperframes() {
   if command -v hyperframes >/dev/null 2>&1; then
     ok "already installed: $(hyperframes --version 2>&1 | head -1)"
   else
-    npm install -g hyperframes || die "npm install -g hyperframes failed"
+    # Install into $NPM_GLOBAL (user-owned) rather than npm's default prefix,
+    # which is root-owned on distro/system Node and fails with EACCES.
+    npm install -g --prefix "$NPM_GLOBAL" hyperframes || die "npm install -g hyperframes failed"
   fi
 
   grep -q 'npm-global/bin' "$HOME/.bashrc" 2>/dev/null \
@@ -156,9 +160,15 @@ install_hyperframes() {
   hyperframes browser ensure || warn "hyperframes browser ensure failed (needed for local rendering)"
   hyperframes skills update   || warn "hyperframes skills update failed"
 
-  hyperframes doctor 2>&1 | grep -E '✗' \
-    && warn "hyperframes doctor reports issues above" \
-    || ok "hyperframes doctor clean"
+  # Capture first: with pipefail, a failing doctor piped into grep sent the
+  # result down the "clean" branch even when ✗ lines were printed.
+  local doctor_out doctor_rc=0
+  doctor_out="$(hyperframes doctor 2>&1)" || doctor_rc=$?
+  if printf '%s\n' "$doctor_out" | grep -E '✗' || [ "$doctor_rc" -ne 0 ]; then
+    warn "hyperframes doctor reports issues (run 'hyperframes doctor' for details)"
+  else
+    ok "hyperframes doctor clean"
+  fi
 }
 
 # -----------------------------------------------------------------------------
@@ -186,18 +196,30 @@ install_video_editing() {
   "$PIP" install --quiet --upgrade pip
 
   local core="moviepy ffmpeg-python opencv-python-headless Pillow numpy"
-  local ai="openai-whisper scenedetect[opencv] torch torchaudio"
+  # scenedetect >= 0.7 depends on the GUI `opencv-python`, which installs a second
+  # cv2 over the headless one (and needs libGL). scenedetect-headless is the
+  # same package built against opencv-python-headless.
+  local ai="openai-whisper scenedetect-headless torch torchaudio"
 
   log "installing core deps"
   "$PIP" install --quiet $core || die "core deps failed"
 
   if [ "$MODE" != "core" ]; then
+    # Venvs from earlier runs may hold scenedetect + opencv-python. Remove them,
+    # then restore the cv2 files the uninstall shares with the headless build.
+    if "$PIP" show opencv-python >/dev/null 2>&1; then
+      log "replacing GUI opencv-python with the headless build"
+      "$PIP" uninstall --quiet -y opencv-python scenedetect || true
+      "$PIP" install --quiet --force-reinstall --no-deps opencv-python-headless \
+        || die "reinstalling opencv-python-headless failed"
+    fi
     log "installing AI deps (whisper, scenedetect, torch) — this is the large one"
     "$PIP" install --quiet $ai || warn "AI deps failed (core still works; captions/silence removal need these)"
   else
     warn "skipping AI deps (--core)"
   fi
 
+  mkdir -p "$HERMES_HOME/skills"
   ln -sfn "$VIDEO_EDITING_DIR" "$HERMES_HOME/skills/video-editing"
 
   # Apply the interpreter + scenedetect patches (idempotent).
@@ -267,8 +289,11 @@ verify() {
   log "Verification"
   local fail=0
 
+  local mac_openscreen="/Applications/Openscreen.app/Contents/MacOS/Openscreen"
   if command -v openscreen >/dev/null 2>&1 && openscreen --help >/dev/null 2>&1; then
     ok "openscreen CLI"
+  elif [ "$OS" = "Darwin" ] && [ -x "$mac_openscreen" ]; then
+    ok "openscreen CLI ($mac_openscreen)"
   else
     warn "openscreen CLI not responding"; fail=1
   fi

@@ -126,7 +126,7 @@ The skill routes by input type and chains the engines. See `skills/video-toolcha
 The installer applies two fixes the upstream skill needs on a current machine:
 
 1. **Interpreter isolation** — repoints the skill's commands at the dedicated venv (`$PY`) instead of whatever `python` resolves to in a Hermes session.
-2. **scenedetect 0.7 compatibility** — 0.7 renamed `AdaptiveDetector`'s `threshold` to `adaptive_threshold`, which broke `scenes detect` on every call. Tracked upstream as [PR #2](https://github.com/argus-metis/hermes-video-editing/pull/2).
+2. **scenedetect 0.7 compatibility** — 0.7 renamed `AdaptiveDetector`'s `threshold` to `adaptive_threshold`, which broke `scenes detect` on every call. The two are on different scales, so the patch keeps AdaptiveDetector's own default unless `--threshold` is given (upstream's 27.0 default would detect no cuts). Tracked upstream as [PR #2](https://github.com/argus-metis/hermes-video-editing/pull/2).
 
 Both live in `patches/video-editing.py` and are idempotent.
 

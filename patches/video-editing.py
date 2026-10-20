@@ -10,9 +10,14 @@ Two fixes the upstream skill needs on a current machine:
 
 2. scenedetect 0.7 compatibility. 0.7 renamed AdaptiveDetector's `threshold`
    argument to `adaptive_threshold`, so `scenes detect` crashed with a TypeError
-   on every call. Tracked upstream as PR #2 in argus-metis/hermes-video-editing.
+   on every call. The two arguments are also on different scales: upstream's
+   default of 27.0 is a ContentDetector-scale value, while AdaptiveDetector's
+   own default is 3.0. Passing 27.0 as `adaptive_threshold` detects no cuts at
+   all, so only an explicit `--threshold` is forwarded. Tracked upstream as PR #2
+   in argus-metis/hermes-video-editing.
 
-Safe to run repeatedly: each patch checks for its own marker first.
+Safe to run repeatedly: each patch checks for its own marker first. Files carrying
+an earlier version of the scenedetect patch are upgraded in place.
 """
 import sys
 from pathlib import Path
@@ -33,12 +38,25 @@ If the verify line fails, create the venv and install deps (see **Install** belo
 """
 
 OLD_SCENEDETECT = "    scene_list = detect(str(inp), AdaptiveDetector(threshold=threshold))"
-NEW_SCENEDETECT = """    # scenedetect 0.7 renamed AdaptiveDetector's `threshold` to `adaptive_threshold`.
+# The previous version of this patch, which forwarded the 27.0 default.
+PREV_SCENEDETECT = """    # scenedetect 0.7 renamed AdaptiveDetector's `threshold` to `adaptive_threshold`.
     # Accept both so this works across versions (0.6 and earlier vs 0.7+).
     try:
         detector = AdaptiveDetector(adaptive_threshold=threshold)
     except TypeError:
         detector = AdaptiveDetector(threshold=threshold)
+    scene_list = detect(str(inp), detector)"""
+NEW_SCENEDETECT = """    # scenedetect 0.7 renamed AdaptiveDetector's `threshold` to `adaptive_threshold`.
+    # The 27.0 default above is on ContentDetector's scale; as an adaptive
+    # threshold it detects no cuts, so use AdaptiveDetector's own default (3.0)
+    # unless --threshold was given. Accept both argument names (pre-0.7 and 0.7+).
+    if args.threshold:
+        try:
+            detector = AdaptiveDetector(adaptive_threshold=threshold)
+        except TypeError:
+            detector = AdaptiveDetector(threshold=threshold)
+    else:
+        detector = AdaptiveDetector()
     scene_list = detect(str(inp), detector)"""
 
 
@@ -70,14 +88,21 @@ def patch_skill_md(path: Path) -> None:
 
 def patch_video_toolkit(path: Path) -> None:
     text = path.read_text()
-    if "adaptive_threshold" in text:
+    if NEW_SCENEDETECT in text:
         print(f"  already patched: {path}")
         return
-    if OLD_SCENEDETECT not in text:
-        print(f"  WARNING: scenedetect call site not found in {path} — upstream may have changed")
+    if PREV_SCENEDETECT in text:
+        path.write_text(text.replace(PREV_SCENEDETECT, NEW_SCENEDETECT, 1))
+        print(f"  upgraded scenedetect patch in {path}")
         return
-    path.write_text(text.replace(OLD_SCENEDETECT, NEW_SCENEDETECT, 1))
-    print(f"  patched {path}")
+    if OLD_SCENEDETECT in text:
+        path.write_text(text.replace(OLD_SCENEDETECT, NEW_SCENEDETECT, 1))
+        print(f"  patched {path}")
+        return
+    if "adaptive_threshold" in text:
+        print(f"  scenedetect call already updated upstream: {path}")
+        return
+    print(f"  WARNING: scenedetect call site not found in {path} — upstream may have changed")
 
 
 def main() -> int:

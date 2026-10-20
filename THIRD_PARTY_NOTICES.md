@@ -42,7 +42,8 @@ machine**. It does not redistribute upstream code. The two changes are:
 1. **Interpreter isolation** — repoints the skill's commands at the dedicated venv
    (`$PY`) instead of whatever `python` resolves to inside a Hermes session.
 2. **scenedetect 0.7 compatibility** — accepts the renamed `adaptive_threshold`
-   argument. Offered upstream as
+   argument, and keeps AdaptiveDetector's own default threshold unless one is
+   given explicitly. Offered upstream as
    [PR #2](https://github.com/argus-metis/hermes-video-editing/pull/2).
 
 Neither change alters the upstream license.
