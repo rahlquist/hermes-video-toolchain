@@ -155,6 +155,10 @@ V=~/.hermes/video-editing/scripts
   Renders are deterministic; same input → same frames.
 - **video-editing deps are isolated** in `~/.hermes/video-editing/.venv`. Always
   set `PY` before running its scripts; never install them into the Hermes env.
+- **Background removal is not installed** by this toolchain. If `enhance bg-remove`
+  reports backgroundremover missing, install it only into the venv:
+  `"$HOME/.hermes/video-editing/.venv/bin/pip" install backgroundremover` — never
+  with a bare `pip`, which would pollute the Hermes environment.
 - **Silence removal / background removal are slow on CPU.** Warn the user before
   running them on long footage.
 - **Platform presets clamp resolution and duration** — check the preset table in

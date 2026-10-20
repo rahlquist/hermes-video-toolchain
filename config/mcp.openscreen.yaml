@@ -4,11 +4,12 @@
 # existing `mcp_servers:` mapping in ~/.hermes/config.yaml (do NOT create a
 # second top-level `mcp_servers:` key).
 #
-# Requires the OpenScreen CLI on PATH. With this repo's installer that is
-# ~/.local/bin/openscreen.
+# Replace the command with the absolute path to the OpenScreen CLI on your
+# machine. With this repo's installer that is /home/<you>/.local/bin/openscreen
+# on Linux, or /Applications/Openscreen.app/Contents/MacOS/Openscreen on macOS.
 
   openscreen:
-    command: /home/rahlquist/.local/bin/openscreen
+    command: /home/YOUR_USER/.local/bin/openscreen
     args:
       - mcp
     enabled: true

@@ -31,6 +31,21 @@ session, then run every command exactly as written:
 
 ```bash
 PY="$HOME/.hermes/video-editing/.venv/bin/python"
+"$PY" -c "import moviepy, cv2; print('video-editing core deps OK')"
+```
+
+If the verify line fails, create the venv and install deps (see **Install** below).
+
+Captions and scene detection also need the AI deps (whisper, scenedetect, torch),
+which `install.sh --core` skips on purpose. Check them with
+`"$PY" -c "import whisper, scenedetect, torch"`. If they are missing, tell the
+user instead of installing them.
+"""
+
+# The section as written by earlier versions of this patch, whose verify line
+# also imported the AI deps and so always failed after `install.sh --core`.
+PREV_INTERPRETER_SECTION = INTERPRETER_SECTION.split("```bash")[0] + """```bash
+PY="$HOME/.hermes/video-editing/.venv/bin/python"
 "$PY" -c "import moviepy, cv2, whisper, scenedetect; print('video-editing deps OK')"
 ```
 
@@ -67,7 +82,9 @@ def patch_skill_md(path: Path) -> None:
     if "$PY scripts/" not in text:
         text = text.replace("python scripts/", "$PY scripts/")
 
-    if "## Interpreter (required)" not in text:
+    if PREV_INTERPRETER_SECTION in text:
+        text = text.replace(PREV_INTERPRETER_SECTION, INTERPRETER_SECTION, 1)
+    elif "## Interpreter (required)" not in text:
         marker = "# Video & Audio Editing Skill\n"
         if marker in text:
             text = text.replace(

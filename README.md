@@ -112,6 +112,7 @@ The skill routes by input type and chains the engines. See `skills/video-toolcha
 | `scenes detect` raises `TypeError` about `threshold` | The patch did not apply — re-run `bash install.sh`, or see `patches/video-editing.py`. |
 | `python scripts/...` fails with `ModuleNotFoundError` | You ran the bare command. Set `PY="$HOME/.hermes/video-editing/.venv/bin/python"` first (the skill says this). |
 | Disk fills up | torch + OpenCV + Chrome ≈ 7 GB. Clean scratch renders; use `--core` if you don't need AI features. |
+| `enhance bg-remove` says backgroundremover is not installed | Not part of this install (large, optional). Install it into the venv: `~/.hermes/video-editing/.venv/bin/pip install backgroundremover`. Never use a bare `pip`, which targets the Hermes environment. |
 | `npm install -g` warns about blocked scripts | Benign for esbuild; add `--allow-scripts=esbuild` only if a feature needs its postinstall artifacts. |
 
 ## Design notes

@@ -32,7 +32,7 @@ case "${1:-}" in
   --core)  MODE="core" ;;
   --verify) MODE="verify" ;;
   "")      ;;
-  -h|--help) sed -n '2,25p' "$0"; exit 0 ;;
+  -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
   *) echo "unknown flag: $1" >&2; exit 2 ;;
 esac
 
@@ -84,6 +84,14 @@ install_openscreen() {
     if command -v openscreen >/dev/null 2>&1 && openscreen --help >/dev/null 2>&1; then
       ok "already installed: $(command -v openscreen)"; return 0
     fi
+    # Installed by an earlier run, but ~/.local/bin is not on PATH: don't
+    # download it again.
+    if [ -x "$HOME/.local/bin/openscreen" ]        && "$OPENSCREEN_DIR/openscreen.AppImage" --help >/dev/null 2>&1; then
+      export PATH="$HOME/.local/bin:$PATH"
+      ok "already installed: $OPENSCREEN_DIR/openscreen.AppImage"
+      warn "$HOME/.local/bin is not on your PATH — add it to use the openscreen command"
+      return 0
+    fi
 
     local api url ver
     api="https://api.github.com/repos/getopenscreen/openscreen/releases/latest"
@@ -91,16 +99,22 @@ install_openscreen() {
       api="https://api.github.com/repos/getopenscreen/openscreen/releases/tags/v$OPENSCREEN_VERSION"
     fi
 
-    url="$(curl -sL "$api" | python3 -c "
-import sys, json
+    # Match the AppImage to this machine: release names carry an arm64/aarch64
+    # tag for ARM builds and no tag for x86_64.
+    url="$(curl -sL "$api" | OPENSCREEN_VERSION="${OPENSCREEN_VERSION:-}" ARCH="$ARCH" python3 -c "
+import json, os, sys
 d = json.load(sys.stdin)
-want = '${OPENSCREEN_VERSION:-}'
+want = os.environ['OPENSCREEN_VERSION']
+arm_tags = ('arm64', 'aarch64')
+want_arm = os.environ['ARCH'] in arm_tags
 for a in d.get('assets', []):
     n = a.get('name', '')
-    if n.endswith('.AppImage') and (not want or want in n):
+    if not n.endswith('.AppImage') or (want and want not in n):
+        continue
+    if any(t in n.lower() for t in arm_tags) == want_arm:
         print(a['browser_download_url']); break
 ")"
-    [ -n "$url" ] || die "could not resolve an OpenScreen .AppImage URL"
+    [ -n "$url" ] || die "could not resolve an OpenScreen .AppImage URL for $ARCH"
     ver="$(curl -sL "$api" | python3 -c "import sys,json;print(json.load(sys.stdin).get('tag_name','?'))")"
 
     log "downloading OpenScreen $ver"
@@ -154,7 +168,7 @@ install_hyperframes() {
     npm install -g --prefix "$NPM_GLOBAL" hyperframes || die "npm install -g hyperframes failed"
   fi
 
-  grep -q 'npm-global/bin' "$HOME/.bashrc" 2>/dev/null \
+  grep -qF "$NPM_GLOBAL/bin" "$HOME/.bashrc" 2>/dev/null \
     || echo "export PATH=\"$NPM_GLOBAL/bin:\$PATH\"" >> "$HOME/.bashrc"
 
   hyperframes browser ensure || warn "hyperframes browser ensure failed (needed for local rendering)"
