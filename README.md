@@ -57,7 +57,7 @@ bash install.sh --verify    # check what is present without installing
 2. **HyperFrames** — `npm install -g`, downloads Chrome Headless Shell for rendering, installs its skills into `~/.hermes/skills/`.
 3. **hermes-video-editing** — clones the repo, creates an isolated Python venv (so torch/OpenCV never touch your Hermes environment), installs deps, symlinks the skill, and applies two compatibility patches.
 4. **Router skill** — installs `video-toolchain` into `~/.hermes/skills/`.
-5. **OpenScreen MCP** — adds the server to `~/.hermes/config.yaml` under `mcp_servers` (55 tools).
+5. **OpenScreen MCP** — adds the server to `~/.hermes/config.yaml` under `mcp_servers` (55 tools). The original is saved as `config.yaml.bak`; if the existing `mcp_servers` block is in a shape the installer does not recognise, it leaves the file alone and asks you to merge `config/mcp.openscreen.yaml` by hand.
 
 Start a **new** Hermes session so the MCP server and skills load.
 

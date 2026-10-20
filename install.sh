@@ -271,29 +271,84 @@ wire_mcp() {
     ok "already configured in $cfg"; return 0
   fi
 
-  python3 - "$cfg" "$HOME/.local/bin/openscreen" <<'PY'
-import re, sys
+  local cmd="$HOME/.local/bin/openscreen"
+  [ "$OS" = "Darwin" ] && cmd="/Applications/Openscreen.app/Contents/MacOS/Openscreen"
+
+  # Edits the file as text (to keep the user's comments and layout), but only
+  # for a block-style `mcp_servers:` mapping it understands, matching its
+  # indentation. Anything else is left untouched for a manual merge. When
+  # PyYAML is importable the result must parse and keep every existing server
+  # before it is written. The original is kept as config.yaml.bak.
+  local rc=0
+  python3 - "$cfg" "$cmd" <<'PY' || rc=$?
+import json, os, re, shutil, sys
+
 path, cmd = sys.argv[1], sys.argv[2]
-block = f"  openscreen:\n    command: {cmd}\n    args:\n      - mcp\n    enabled: true\n"
-src = open(path).read()
+with open(path, encoding="utf-8") as f:
+    src = f.read()
 lines = src.splitlines()
-idx = next((i for i, l in enumerate(lines) if re.match(r'^mcp_servers:\s*$', l)), None)
-if idx is None:
-    if src and not src.endswith('\n'):
-        src += '\n'
-    src += '\nmcp_servers:\n' + block
+
+def entry(ind):
+    # JSON strings are valid YAML double-quoted scalars, so any path is safe.
+    return [f"{ind}openscreen:", f"{ind * 2}command: {json.dumps(cmd)}",
+            f"{ind * 2}args:", f"{ind * 2}  - mcp", f"{ind * 2}enabled: true"]
+
+top = [i for i, l in enumerate(lines) if re.match(r"mcp_servers\s*:", l)]
+if len(top) > 1:
+    sys.exit("more than one top-level mcp_servers key")
+if not top:
+    if src and not src.endswith("\n"):
+        src += "\n"
+    new = src + "\nmcp_servers:\n" + "\n".join(entry("  ")) + "\n"
 else:
-    j = idx + 1
-    while j < len(lines):
-        if lines[j] and not lines[j][0].isspace() and not lines[j].lstrip().startswith('#'):
+    idx = top[0]
+    if not re.match(r"mcp_servers\s*:\s*(#.*)?$", lines[idx]):
+        sys.exit("mcp_servers is not a block mapping (inline value)")
+    end = idx + 1
+    while end < len(lines):
+        l = lines[end]
+        if l.strip() and not l[0].isspace() and not l.startswith("#"):
             break
-        j += 1
-    lines.insert(j, block.rstrip('\n'))
-    src = '\n'.join(lines) + '\n'
-open(path, 'w').write(src)
-print("wired")
+        end += 1
+    body = [i for i in range(idx + 1, end)
+            if lines[i].strip() and lines[i][0].isspace() and not lines[i].lstrip().startswith("#")]
+    if body:
+        ind = re.match(r"[ ]*", lines[body[0]]).group(0)
+        if not ind:
+            sys.exit("could not determine the indentation of mcp_servers entries")
+        if lines[body[0]].lstrip().startswith("- "):
+            sys.exit("mcp_servers is a list, not a mapping")
+        at = body[-1] + 1
+    else:
+        ind, at = "  ", idx + 1
+    lines[at:at] = entry(ind)
+    new = "\n".join(lines) + "\n"
+
+try:
+    import yaml
+except ImportError:
+    yaml = None
+if yaml is not None:
+    try:
+        before = (yaml.safe_load(src) or {}).get("mcp_servers") or {}
+        after = yaml.safe_load(new).get("mcp_servers")
+    except Exception as e:
+        sys.exit(f"edited config does not parse: {e}")
+    if not isinstance(after, dict) or "openscreen" not in after \
+            or any(k not in after for k in before):
+        sys.exit("edited config would lose existing mcp_servers entries")
+
+shutil.copy2(path, path + ".bak")
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    f.write(new)
+os.replace(tmp, path)
 PY
-  ok "added mcp_servers.openscreen to $cfg"
+  if [ "$rc" -eq 0 ]; then
+    ok "added mcp_servers.openscreen to $cfg (backup: $cfg.bak)"
+  else
+    warn "left $cfg unchanged — merge config/mcp.openscreen.yaml into mcp_servers by hand"
+  fi
 }
 
 # -----------------------------------------------------------------------------
